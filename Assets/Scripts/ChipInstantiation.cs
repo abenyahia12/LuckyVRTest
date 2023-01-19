@@ -1,121 +1,148 @@
 ﻿using UnityEngine;
-using System.Collections;
 using System.Collections.Generic;
-using Photon.Pun.Demo.Procedural;
-using System.Reflection;
 
 public class ChipInstantiation : MonoBehaviour
 {
-    public GameObject chipPrefab;
-    public int initialChipCount = 100;
-    public int chipStackCount = 10;
-    public int chipIncrement = 10;
-    public List<Color> colors = new List<Color>();
-    public Vector3 offset= Vector3.zero;
-    public float rowOffset;
-    public float chipOffSet=0.24f;
-    public MyPlayer[] myPlayers;
-    public Material material;
-    private MaterialPropertyBlock block;
+    #region Public Fields
+    public MyPlayer[] m_MyPlayers;
+    #endregion
 
-    public bool Deactivate = false;
-    public bool ADD = false;
-    public int playerId = 0;
-    public int numberOfStacks = 0;
-    void Awake()
+    #region Private Serializable Fields
+    [SerializeField]
+    private GameObject chipPrefab;
+    [SerializeField]
+    private int initialChipCount = 100;
+    [SerializeField]
+    private int chipStackCount = 10;
+    [SerializeField]
+    private List<Color> colors = new List<Color>();
+    [SerializeField]
+    private Vector3 offset= Vector3.zero;
+    [SerializeField]
+    private float rowOffset;
+    [SerializeField]
+    private float chipOffSet=0.24f;
+    [SerializeField]
+    private Material material;
+    #endregion
+    #region Private  Fields
+    private MaterialPropertyBlock block;
+    #endregion
+    private GameObject[] sceneObjects;
+    private int seed = 0;
+    // this one is the function that starts the Generation
+    public void GeneratePlayers()
     {
+        //this is made so that both players have the same randomization of colors without syncronizing it through network
+        Random.InitState(seed);
+        // we will use the same block material property with different colors for the stacks
         block = new MaterialPropertyBlock();
-        for (int i = 0; i < myPlayers.Length; i++)
+        for (int i = 0; i < m_MyPlayers.Length; i++)
         {
-            GenerateChips(myPlayers[i].Id);
+            GenerateChips(m_MyPlayers[i].Id);
+        }
+    }
+    public void ProcessBetResult(bool isRedColor, List<UtilityClass.BetData> betDatas)
+    {
+        for (int i = 0; i < m_MyPlayers.Length; i++)
+        {
+             if (betDatas[i].betcolor!= UtilityClass.ToColor(isRedColor))
+            {
+                DeActivatePlayerStacks(betDatas[i].PlayerIndex, betDatas[i].amount);
+            }
+            else
+            {
+                AddPlayerStacks(betDatas[i].PlayerIndex, betDatas[i].amount);
+            }
         }
         
     }
-
-    private void GenerateChips(int playerId)
-    {
-        myPlayers[playerId].ChipStacks = new List<GameObject>();
-        myPlayers[playerId].currentRow = 0;
-        myPlayers[playerId].currentStackCount = -1;
-        for (int i = 0; i < initialChipCount / chipStackCount; i++)
-        {
-            CreateStack(playerId, i);
-        }
-        myPlayers[playerId].numberOfChips+= initialChipCount;
-    }
-
-    private void CreateStack(int playerId, int i)
-    {
-        GenerateColor();
-        myPlayers[playerId].currentStackCount++;
-        if (myPlayers[playerId].currentStackCount >= chipStackCount)
-        {
-            myPlayers[playerId].currentRow++;
-            myPlayers[playerId].currentStackCount = 0;
-        }
-        myPlayers[playerId].ChipStacks.Add(new GameObject("ChipStack" + i));
-        myPlayers[playerId].NumberOfActivatedStacks++;
-        myPlayers[playerId].ChipStacks[i].transform.parent = myPlayers[playerId].spawnTransform;
-        myPlayers[playerId].ChipStacks[i].transform.localPosition = new Vector3(myPlayers[playerId].currentStackCount * offset.x, myPlayers[playerId].currentStackCount * offset.y, myPlayers[playerId].currentRow * rowOffset);
-        myPlayers[playerId].ChipStacks[i].transform.rotation = myPlayers[playerId].spawnTransform.rotation;
-        for (int j = 0; j < chipStackCount; j++)
-        {
-            GameObject chip = CreateChip(chipPrefab, colors[i], myPlayers[playerId].ChipStacks[i].transform);
-            chip.transform.localPosition = new Vector3(0, j * chipOffSet, 0);
-        }
-    }
-
     public void AddPlayerStacks(int playerId, int numberOfStacks)
     {
+        //
         int numberOfActivations = 0;
-        int startingNumberOfChipStacksCount = myPlayers[playerId].ChipStacks.Count;
-        if (myPlayers[playerId].ChipStacks.Count - myPlayers[playerId].NumberOfActivatedStacks >= numberOfStacks)
-        { 
+        int startingNumberOfChipStacksCount = m_MyPlayers[playerId].ChipStacks.Count;
+        //this is done to check if if the number of stacks to activate is less then then the total of deactivated stacks 
+        if (m_MyPlayers[playerId].ChipStacks.Count - m_MyPlayers[playerId].NumberOfActivatedStacks >= numberOfStacks)
+        {
             numberOfActivations = numberOfStacks;
         }
         else
         {
-            numberOfActivations = myPlayers[playerId].ChipStacks.Count - myPlayers[playerId].NumberOfActivatedStacks;
+            numberOfActivations = m_MyPlayers[playerId].ChipStacks.Count - m_MyPlayers[playerId].NumberOfActivatedStacks;
         }
-        int remainingStacksToAdd = numberOfStacks- numberOfActivations;
-   
+        int remainingStacksToAdd = numberOfStacks - numberOfActivations;
+        //Activate the inactive needed stacks to avoid regenerating them which will save us CPU 
         if (numberOfActivations > 0)
         {
-            //Activate
-            for (int i = myPlayers[playerId].NumberOfActivatedStacks; i < myPlayers[playerId].NumberOfActivatedStacks+ numberOfActivations; i++)
+  
+            for (int i = m_MyPlayers[playerId].NumberOfActivatedStacks; i < m_MyPlayers[playerId].NumberOfActivatedStacks + numberOfActivations; i++)
             {
-                myPlayers[playerId].ChipStacks[i].SetActive(true);
+                m_MyPlayers[playerId].ChipStacks[i].SetActive(true);
             }
-            myPlayers[playerId].NumberOfActivatedStacks = myPlayers[playerId].NumberOfActivatedStacks+numberOfActivations;
+            m_MyPlayers[playerId].NumberOfActivatedStacks = m_MyPlayers[playerId].NumberOfActivatedStacks + numberOfActivations;
         }
         //Generate the rest
         for (int i = startingNumberOfChipStacksCount; i < startingNumberOfChipStacksCount + remainingStacksToAdd; i++)
         {
             CreateStack(playerId, i);
         }
-        myPlayers[playerId].numberOfChips += numberOfStacks * chipStackCount;
+        m_MyPlayers[playerId].numberOfChips += numberOfStacks * chipStackCount;
     }
     public void DeActivatePlayerStacks(int playerId, int numberOfStacks)
     {
+        //To save some CPU time , I deactivated Player stacks instead of destroying them.
         for (int i = 0; i < numberOfStacks; i++)
         {
-            myPlayers[playerId].ChipStacks[myPlayers[playerId].NumberOfActivatedStacks - 1 - i].SetActive(false);
-            
+            m_MyPlayers[playerId].ChipStacks[m_MyPlayers[playerId].NumberOfActivatedStacks - 1 - i].SetActive(false);
         }
-        myPlayers[playerId].NumberOfActivatedStacks-= numberOfStacks;
-        if(myPlayers[playerId].NumberOfActivatedStacks< myPlayers[playerId].multiplesOfstackstoBet)
-        { 
-            myPlayers[playerId].multiplesOfstackstoBet = myPlayers[playerId].NumberOfActivatedStacks;
-        }
-        myPlayers[playerId].numberOfChips-= numberOfStacks* chipStackCount;
-        if (myPlayers[playerId].numberOfChips==0) 
+        m_MyPlayers[playerId].NumberOfActivatedStacks -= numberOfStacks;
+        //this is made to make sure the user can't bet more than he does have
+        if (m_MyPlayers[playerId].NumberOfActivatedStacks < m_MyPlayers[playerId].multiplesOfstackstoBet)
         {
-            AddPlayerStacks(playerId, 100/ chipStackCount);
-            myPlayers[playerId].multiplesOfstackstoBet =1;
+            m_MyPlayers[playerId].multiplesOfstackstoBet = m_MyPlayers[playerId].NumberOfActivatedStacks;
+        }
+        m_MyPlayers[playerId].numberOfChips -= numberOfStacks * chipStackCount;
+        // THIS IS where the PLAYER RESETS , new 100 chips 
+        if (m_MyPlayers[playerId].numberOfChips == 0)
+        {
+            AddPlayerStacks(playerId, 100 / chipStackCount);
+            m_MyPlayers[playerId].multiplesOfstackstoBet = 1;
         }
     }
-
-    void GenerateColor()
+    private void GenerateChips(int playerId)
+    {
+        m_MyPlayers[playerId].ChipStacks = new List<GameObject>();
+        m_MyPlayers[playerId].currentRow = 0;
+        m_MyPlayers[playerId].currentStackCount = -1;
+        for (int i = 0; i < initialChipCount / chipStackCount; i++)
+        {
+            CreateStack(playerId, i);
+        }
+        m_MyPlayers[playerId].numberOfChips+= initialChipCount;
+    }
+    private void CreateStack(int playerId, int i)
+    {
+        GenerateColor();
+        m_MyPlayers[playerId].currentStackCount++;
+        if (m_MyPlayers[playerId].currentStackCount >= chipStackCount)
+        {
+            m_MyPlayers[playerId].currentRow++;
+            m_MyPlayers[playerId].currentStackCount = 0;
+        }
+        m_MyPlayers[playerId].ChipStacks.Add(new GameObject("ChipStack" + i));
+        m_MyPlayers[playerId].NumberOfActivatedStacks++;
+        m_MyPlayers[playerId].ChipStacks[i].transform.parent = m_MyPlayers[playerId].spawnTransform;
+        m_MyPlayers[playerId].ChipStacks[i].transform.localPosition = new Vector3(m_MyPlayers[playerId].currentStackCount * offset.x, m_MyPlayers[playerId].currentStackCount * offset.y, m_MyPlayers[playerId].currentRow * rowOffset);
+        m_MyPlayers[playerId].ChipStacks[i].transform.rotation = m_MyPlayers[playerId].spawnTransform.rotation;
+        for (int j = 0; j < chipStackCount; j++)
+        {
+            GameObject chip = CreateChip(chipPrefab, colors[i], m_MyPlayers[playerId].ChipStacks[i].transform);
+            chip.transform.localPosition = new Vector3(0, j * chipOffSet, 0);
+        }
+    }
+    //We need a different color for every new stack
+    private void GenerateColor()
     {
         Color newColor = Random.ColorHSV();
 
@@ -126,31 +153,16 @@ public class ChipInstantiation : MonoBehaviour
 
         colors.Add(newColor);
     }
- 
-    public  GameObject CreateChip(GameObject prefab, Color color, Transform parent)
+    private GameObject CreateChip(GameObject prefab, Color color, Transform parent)
     {
         GameObject chip = GameObject.Instantiate(prefab, parent);
         block.SetColor("_Color", color);
         Renderer renderer= chip.GetComponent<Renderer>();
         renderer.material = material;
         renderer.SetPropertyBlock(block);
-      
         return chip;
     }
-    void Update()
-    {
-        if (Deactivate)
-        {
-            Deactivate = false;
-            DeActivatePlayerStacks(playerId, numberOfStacks);
-        }
 
-        if (ADD)
-        {
-            ADD = false;
-            AddPlayerStacks(playerId, numberOfStacks);
-        }
-    }
 }
 
 

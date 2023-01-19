@@ -26,7 +26,6 @@ public class MyPlayerNameInputField : MonoBehaviour
     /// &lt;/summary&gt;
     void Start()
     {
-
         string defaultName = string.Empty;
         TMP_InputField _inputField = this.GetComponent<TMP_InputField>();
         if (_inputField != null)

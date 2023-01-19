@@ -3,11 +3,22 @@ using UnityEngine.SceneManagement;
 
 using Photon.Pun;
 using Photon.Realtime;
+using System.Collections.Generic;
+using static UtilityClass;
 
 
 public class MyGameManager : MonoBehaviourPunCallbacks
 {
 
+    [SerializeField]
+    private LocalGameManager m_LocalGameManager;
+    private PhotonView myPhotonView;
+    [SerializeField]
+    private bool betResultIsRed;
+    [SerializeField]
+    private List<UtilityClass.BetData> betDataList;
+    [SerializeField]
+    private int playersrequiredToProcessBet = 2;
     #region Photon Callbacks
 
     /// &lt;summary&gt;
@@ -17,10 +28,27 @@ public class MyGameManager : MonoBehaviourPunCallbacks
     {
         SceneManager.LoadScene(0);
     }
-
+    public void StartGame()
+    {
+        myPhotonView= GetComponent<PhotonView>();
+        betDataList = new List<UtilityClass.BetData>();
+    }
     #endregion
     #region Private Methods
-
+    //The Master is the one that decides which color is revealed to both players
+    void RevealColor()
+    {
+        int randomNumber = UnityEngine.Random.Range(0, 2);
+        if (randomNumber == 0)
+        {
+            betResultIsRed = true;
+        }
+        else
+        {
+            betResultIsRed = false;
+        }
+        myPhotonView.RPC("ProcessResult", RpcTarget.All, betResultIsRed);
+    }
     void LoadArena()
     {
         if (!PhotonNetwork.IsMasterClient)
@@ -38,7 +66,11 @@ public class MyGameManager : MonoBehaviourPunCallbacks
     {
         PhotonNetwork.LeaveRoom();
     }
-
+    //this is the RPC call to inform everyone that that player bet how many stacks on which coller
+    public void BetRPCCall(bool IsMaster, int amount, bool isRed)
+    {
+        myPhotonView.RPC("BetRPC", RpcTarget.All, IsMaster, amount, isRed);
+    }
     #endregion
     #region Photon Callbacks
 
@@ -66,6 +98,38 @@ public class MyGameManager : MonoBehaviourPunCallbacks
         }
 
 
+    }
+    #endregion
+    void Update()
+    {
+        if (PhotonNetwork.IsMasterClient)
+        {
+            //The Master is the one that decides which color is revealed to both players
+            if (betDataList.Count == playersrequiredToProcessBet)
+            {
+                RevealColor();
+            }
+        }
+    }
+   
+    #region PUNRPC
+
+    [PunRPC]
+    public void BetRPC(bool IsMaster,int amount, bool isRed, PhotonMessageInfo photonMessageInfo)
+    {
+        BetData myBetData= new BetData();
+        myBetData.PlayerIndex = IsMaster ? 0 : 1;
+        myBetData.amount = amount;
+        myBetData.betcolor = UtilityClass.ToColor(isRed);
+        betDataList.Add(myBetData);
+    }
+
+    [PunRPC]
+    public void ProcessResult(bool betResultIsRed,PhotonMessageInfo photonMessageInfo)
+    {
+        m_LocalGameManager.ProcessResult(betResultIsRed, betDataList);
+        //this is to reset the game
+        betDataList.Clear();
     }
     #endregion
 }
